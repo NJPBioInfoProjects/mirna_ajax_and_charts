@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>miRNA AJAX and Charts</title>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://www.gstatic.com/charts/loader.js"></script>
+</head>
+<body>
+  <h1>miRNA Targeting Score Explorer</h1>
+  <p>This page lets you generate a histogram of miRNA targeting scores for any gene without reloading.</p>
+    <h2>Target Scores Histogram</h2>
+    <input type="text" id="gene-input" placeholder="Enter gene name">
+    <span>Examples: A1CF, AASS</span>
+    <button id="hist-btn">Gene Targeting Scores Histogram</button>
+    <div id="histogram-div"></div>
+    <script>
+      // Load the Google Charts library
+      google.charts.load('current', {'packages':['corechart']});
+      google.charts.setOnLoadCallback(function() {
+        // Button click handler
+        document.getElementById('hist-btn').addEventListener('click', function() {
+          var gene = document.getElementById('gene-input').value.trim();
+          if (!gene) {
+            alert('Please enter a gene name.');
+            return;
+          }
+          var container = document.getElementById('histogram-div');
+          container.innerHTML = ''; // clear previous chart or message
+
+          // Fetch scores from Flask endpoint
+          console.log('Requesting histogram data for gene:', gene);
+          fetch('npetruni_AJAX_and_charts/histogram?gene=' + encodeURIComponent(gene))
+            .then(function(response) { return response.text(); })
+            .then(function(text) {
+              console.log('Raw response text:', text);
+              var data;
+              try {
+                data = JSON.parse(text);
+              } catch (e) {
+                console.warn('JSON parse failed, defaulting to empty data:', e);
+                data = [];
+              }
+              console.log('Parsed data:', data);
+              if (!data || data.length === 0) {
+                container.textContent = 'There was no data for the gene ' + gene;
+                return;
+              }
+              // Prepare DataTable
+              var chartData = new google.visualization.DataTable();
+              chartData.addColumn('number', 'Score');
+              data.forEach(function(score) {
+                chartData.addRow([score]);
+              });
+
+              // Chart options
+              var options = {
+                title: 'Targeting Scores for gene ' + gene.toUpperCase(),
+                legend: { position: 'none' },
+                histogram: { bucketSize: 0.05 },
+                height: 400,
+                hAxis: {
+                  title: 'Target Score',
+                },
+                vAxis: {
+                  title: 'Count'
+                }
+              };
+
+              // Draw the histogram
+              var chart = new google.visualization.Histogram(container);
+              chart.draw(chartData, options);
+            })
+            .catch(function(err) {
+              container.textContent = 'Error retrieving data: ' + err;
+            });
+        });
+      });
+</script>
+
+  <h2>Gene Sequence Search</h2>
+  <input type="text" id="seq-input" placeholder="Enter 7-9 bp sequence">
+  <span>Allowed: ACGT only, length 7-9</span>
+  <button id="search-btn">Find Genes</button>
+  <div id="search-div"></div>
+
+  <script>
+    document.getElementById('search-btn').addEventListener('click', function() {
+      var seq = document.getElementById('seq-input').value.trim().toUpperCase();
+      if (!/^[ACGT]{7,9}$/.test(seq)) {
+        alert('Please enter a valid sequence (7-9 characters, ACGT only).');
+        return;
+      }
+      var container = document.getElementById('search-div');
+      container.innerHTML = ''; // clear previous content
+
+      fetch('npetruni_AJAX_and_charts/gene_search?sequence=' + encodeURIComponent(seq))
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+          if (!data || data.length === 0) {
+            container.textContent = 'There were no genes matching your sequence ' + seq;
+            return;
+          }
+          var title = document.createElement('h3');
+          title.textContent = 'Table of genes with sequences containing ' + seq;
+          container.appendChild(title);
+
+          var table = document.createElement('table');
+          var thead = document.createElement('thead');
+          thead.innerHTML = '<tr><th>Gene</th><th>Sequence Context</th><th>Chromosome</th><th>Start</th><th>Stop</th></tr>';
+          table.appendChild(thead);
+
+          var tbody = document.createElement('tbody');
+          data.forEach(function(row) {
+            var tr = document.createElement('tr');
+            tr.innerHTML = '<td>' + row.gene + '</td>'
+                         + '<td>' + row.sequence_context + '</td>'
+                         + '<td>' + row.chromosome + '</td>'
+                         + '<td>' + row.start + '</td>'
+                         + '<td>' + row.stop + '</td>';
+            tbody.appendChild(tr);
+          });
+          table.appendChild(tbody);
+          container.appendChild(table);
+        })
+        .catch(function(err) {
+          container.textContent = 'Error retrieving data: ' + err;
+        });
+    });
+  </script>
+</body>
+</html>
